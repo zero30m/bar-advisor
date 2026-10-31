@@ -1,0 +1,6 @@
+.env
+private/*
+!private/.gitkeep
+node_modules/
+.DS_Store
+*.log

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#ffffff" />
+    <meta
+      name="description"
+      content="酒吧顾问，让每一晚的生意更有数。账单、活动、营销与游戏，一个轻盈的经营工作台。"
+    />
+    <link rel="icon" href="/icon.svg" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="stylesheet" href="/style.css" />
+    <title>酒吧顾问 · 每一晚，更有数</title>
+  </head>
+  <body>
+    <div class="shell">
+      <header>
+        <a class="brand" href="/" aria-label="酒吧顾问首页"
+          ><span>酒吧顾问</span></a
+        ><button class="store" id="storeButton" aria-label="门店设置">
+          <span id="storeName">我的酒吧</span><span>⌄</span>
+        </button>
+      </header>
+      <main id="app" aria-live="polite">
+        <div class="loading">正在打开你的经营工作台…</div>
+      </main>
+      <nav id="tabs" aria-label="主导航"></nav>
+      <footer>酒吧顾问</footer>
+    </div>
+    <dialog id="sheet"><div id="sheetContent"></div></dialog>
+    <div id="toast" role="status"></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
