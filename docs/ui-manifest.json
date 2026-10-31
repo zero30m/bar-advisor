@@ -1,0 +1,10 @@
+{
+  "baseline_commit": "e2f2ce795bb9ee9a5817aff23542a553e714c11c",
+  "files": {
+    "public/app.js": "5b41b80b7e2542b2b1315c4980f69781ad156e5c832e0e3edac2ae6c0aa9ee8b",
+    "public/icon.svg": "fed5e17ce2d74815a83743e5e54459243299b13aed0bf1536d466b157a229615",
+    "public/index.html": "352d465d520e040a9f4e6355755834d2551d4105440554728cfaac6ed6b0c297",
+    "public/manifest.json": "f68273ba650d7bc8338709639e35d790e3e6b4a463cc32a922185cb550db3350",
+    "public/style.css": "5c0b7625a84a8df0fa151bab277df7f8beae195b11bc1896a2f3f753c9730799"
+  }
+}

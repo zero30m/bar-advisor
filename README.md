@@ -2,11 +2,21 @@
 
 面向国内独立酒吧经营者的移动端经营工作台。原生 HTML/CSS/JavaScript + Node HTTP + SQLite，零 npm 运行时依赖，无构建步骤。
 
+公开仓库：https://github.com/zero30m/bar-advisor
+
+- [完整部署步骤](docs/DEPLOYMENT.md)
+- [给另一个 AI 的复刻规范](docs/REPLICATION.md)
+- [AI 接口接入示例](docs/AI.md)
+- [经营资料说明](knowledge/README.md)
+
 ## 本地运行
 
 需要 Node.js 22.13+（建议 Node 24 LTS）。
 
 ```sh
+git clone https://github.com/zero30m/bar-advisor.git
+cd bar-advisor
+cp knowledge/knowledge.txt private/knowledge.txt
 cp .env.example .env
 # 在 .env 填写 CHATANYWHERE_API_KEY
 npm start
@@ -22,9 +32,9 @@ npm start
 - 营销：按主题生成策划、朋友圈文案、博主邀约、海报标题、执行清单。服务端保存，复制文案，Canvas PNG 海报导出。执行清单勾选保存在当前浏览器。
 - 游戏：MBTI/心情/口味匹配、低度与无酒精选择、现场点单卡、破冰话题卡。匹配使用本地规则，无 AI 花费；点单卡不会发送订单。
 
-## 私有资料
+## 服务端经营资料
 
-`private/knowledge.txt` 由用户授权的 DOCX 提取，不随源码上传。服务启动时载入并分为 1,000 字片段，按任务关键词选取最多 4 段。资料仅在服务端作为参考，不作为可执行指令；不提供静态下载路由。模型生成的是建议，模型端不输出资料原文通过提示约束，不能当作形式化防泄漏保证。
+经用户授权，原始 DOCX 与提取文本已放入公开仓库的 `knowledge/` 目录。部署时将文本复制为 `private/knowledge.txt`。公开仓库访客可以下载资料，但应用前端不展示或提供资料下载。服务启动时载入并分为 1,000 字片段，按任务关键词选取最多 4 段。资料仅在服务端作为参考，不作为可执行指令；不提供静态下载路由。模型生成的是建议，模型端不输出资料原文通过提示约束，不能当作形式化防泄漏保证。
 
 导入资料：
 
@@ -42,7 +52,7 @@ ChatAnywhere OpenAI 兼容 `POST /v1/chat/completions`，默认模型 `gpt-4o-mi
 
 ## 数据与备份
 
-`.env`、`private/` 中的数据库、资料与缓存全部忽略于 Git。停止进程后复制整个 `private/` 目录可做备份；不要在服务写入时只复制 SQLite 主文件。GitHub 只包含应用源码与文档。
+`.env` 与 `private/` 中的运行时数据库、资料副本及缓存全部忽略于 Git。停止进程后复制整个 `private/` 目录可做备份；不要在服务写入时只复制 SQLite 主文件。GitHub 包含应用源码、文档及用户授权公开的经营资料，不包含密钥和经营账本。
 
 定时采集和分析依赖本地服务运行，电脑关机、休眠或进程退出时不会执行；重新启动后补跑。要持续运营，需后续迁移到常驻服务器并加上身份认证、独立调度与备份。
 
