@@ -1,0 +1,22 @@
+[Unit]
+Description=Bar Advisor public shared-ledger gateway
+After=network.target bar-advisor.service
+[Service]
+Type=simple
+User=bar-advisor
+Group=bar-advisor
+WorkingDirectory=/opt/bar-advisor/app
+EnvironmentFile=/etc/bar-advisor/service.env
+ExecStart=/opt/bar-advisor/runtime/bin/node --max-old-space-size=64 deploy/public-proxy.mjs
+Restart=on-failure
+RestartSec=5
+MemoryMax=128M
+CPUQuota=20%
+TasksMax=24
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+[Install]
+WantedBy=multi-user.target

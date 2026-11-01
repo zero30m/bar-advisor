@@ -91,3 +91,7 @@ ssh -N -L 4317:127.0.0.1:4317 bar@你的服务器地址
 - 更新：先备份，再 `git pull --ff-only`，按需复制新的资料文本，重启服务。
 - 本地测试：`npm test` 使用临时数据库，不修改真实账本。
 - 更换密钥或模型：编辑 `.env` 后重启，不修改前端。
+
+## 千问公开代理
+
+用户已明确授权公开账本，部署 `bar-advisor-proxy.service`，回环8790，公网精确路径 `/bar-advisor-proxy`。配置见deploy/public-proxy.mjs、deploy/nginx-public-proxy.conf。使用与后端相同的服务端环境文件。无用户鉴权，所有访客共享账本和20次每日AI额度；底层API仍有服务端令牌。更换令牌需同时重启bar-advisor和bar-advisor-proxy。限速及CORS不代表身份验证。
