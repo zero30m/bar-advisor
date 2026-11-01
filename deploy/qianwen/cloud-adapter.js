@@ -1,54 +1,74 @@
 (function () {
   "use strict";
-  var CFG = window.__BAR_BACKEND__ || {};
-  var ROUTES = {
-    "GET|state": ["GET", "/state"],
-    "GET|hotspots": ["GET", "/hotspots"],
-    "PUT|bills": ["PUT", "/bills"],
-    "DELETE|bills": ["DELETE", "/bills"],
-    "PUT|settings": ["PUT", "/settings"],
-    "POST|report": ["POST", "/report"],
-    "POST|campaigns": ["POST", "/campaigns"]
-  };
-
-  function messageOf(d, status) {
-    if (d && typeof d.error === "string") return d.error;
-    if (d && d.error && typeof d.error.message === "string") return d.error.message;
-    if (d && typeof d.message === "string") return d.message;
-    return "请求失败（" + status + "）";
+  const URL = "https://mfjgq.fun/bar-advisor-proxy";
+  const allowed = new Set([
+    "GET /state", "GET /hotspots", "PUT /bills", "DELETE /bills",
+    "PUT /settings", "POST /report", "POST /campaigns"
+  ]);
+  const reading = new Map();
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+  function failure(message, retryable = false) {
+    return Object.assign(new Error(message), { retryable });
   }
-
-  async function call(method, path, data) {
-    var key = method + "|" + path;
-    var route = ROUTES[key];
-    if (!route) throw new Error("不支持的请求：" + method + " /api/" + path);
-    var res;
-    if (CFG.mode === "direct") {
-      if (!CFG.baseURL) throw new Error("尚未配置后端地址");
-      res = await fetch(CFG.baseURL.replace(/\/+$/, "") + route[1], {
-        method: route[0],
-        headers: data ? { "Content-Type": "application/json" } : undefined,
-        body: data ? JSON.stringify(data) : undefined,
-        signal: AbortSignal.timeout(120000)
-      });
-    } else {
-      if (!CFG.url) throw new Error("尚未配置服务端代理地址");
-      res = await fetch(CFG.url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ route: route[0] + " " + route[1], payload: data || {} }),
-        signal: AbortSignal.timeout(120000)
-      });
+  async function request(body, safeToRetry) {
+    for (let attempt = 0; ; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 20000);
+      try {
+        const response = await fetch(URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "omit", cache: "no-store",
+          body: JSON.stringify(body), signal: controller.signal
+        });
+        const text = await response.text();
+        const transient = [429, 502, 503, 504].includes(response.status);
+        let result;
+        try { result = text ? JSON.parse(text) : null; }
+        catch { throw failure(`云端网关暂时异常（HTTP ${response.status}）`, transient); }
+        if (!response.ok || result?.error || result?.ok === false) {
+          const message = typeof result?.error === "string"
+            ? result.error : `请求失败（HTTP ${response.status}）`;
+          throw failure(message, transient);
+        }
+        return result;
+      } catch (error) {
+        const network = controller.signal.aborted || error instanceof TypeError;
+        if (safeToRetry && attempt < 2 && (network || error.retryable)) {
+          clearTimeout(timer);
+          await wait(800 * (attempt + 1));
+          continue;
+        }
+        if (network) {
+          throw failure(safeToRetry
+            ? "网络连接暂时中断，请稍后重试"
+            : "请求结果尚未确认，请先刷新查看，避免重复提交");
+        }
+        throw error;
+      } finally { clearTimeout(timer); }
     }
-    var text = await res.text();
-    var d = null;
-    try { d = text ? JSON.parse(text) : null; } catch (e) { throw new Error("后端返回非 JSON（HTTP " + res.status + "）"); }
-    if (!res.ok) throw new Error(messageOf(d, res.status));
-    if (d && (d.ok === false || d.error)) throw new Error(messageOf(d, res.status));
-    return d;
   }
-
+  async function call(path, method, data) {
+    const route = `${method} /${path}`;
+    if (!allowed.has(route)) throw new Error(`不支持的请求：${route}`);
+    const generate = route === "POST /report" || route === "POST /campaigns";
+    let result = await request({ route, payload: data ?? {}, async: generate }, method === "GET");
+    const deadline = Date.now() + 120000;
+    while (result?.pending === true) {
+      if (Date.now() > deadline) throw new Error("生成仍在处理中，请稍后重新查看");
+      const jobId = result.jobId;
+      if (!jobId) throw new Error("生成任务返回格式异常");
+      await wait(1500);
+      result = await request({ route: "GET /job", payload: { jobId } }, true);
+    }
+    return result;
+  }
   window.__barAdvisorLocalApi = function (path, method = "GET", data) {
-    return call(method, path, data);
+    if (method !== "GET") return call(path, method, data);
+    const key = JSON.stringify([path, data ?? null]);
+    if (!reading.has(key)) {
+      reading.set(key, call(path, method, data).finally(() => reading.delete(key)));
+    }
+    return reading.get(key);
   };
 })();

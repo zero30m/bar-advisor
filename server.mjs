@@ -1,4 +1,5 @@
 import http from "node:http";
+import { reportFacts, reportSummary } from "./report-finance.mjs";
 import { accessGate } from "./deploy/access.mjs";
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync, mkdirSync, existsSync } from "node:fs";
@@ -78,7 +79,7 @@ async function ai(kind, input) {
     ).run(day);
     const tasks = {
       report:
-        '返回 JSON 对象 {"summary":"120字以内的具体经营复盘，包含数字与一条行动建议"}。不编造原因。根据已记账天数说明数据局限，不把现金差额当完整会计净利润。',
+        '返回 JSON 对象 {"summary":"不超过80字的经营行动建议"}。金额已由代码计算，输入金额全部为人民币元。你的建议禁止包含任何数字、数量词、金额、百分比、倍数、万元或利润估算，不复述财务数字。只根据实际数据提出定性的具体行动建议，不编造经营原因。',
       campaign:
         '返回 JSON 对象 {"title":"18字内活动名","concept":"活动策划，含客群、玩法、时间、定价与成本边界，200字内","social":"朋友圈文案，120字内","creator":"博主合作邀约文案，120字内","poster":"海报主标题，12字内","checklist":["准备动作","现场动作","复盘动作"]}。基于所选热点制作可执行方案，不虚构热点事实，不要求使用侵权音乐或图片。',
     };
@@ -140,18 +141,9 @@ async function ai(kind, input) {
   }
 }
 function reportInput(date, weekly = false) {
-  const start = new Date(date + "T00:00:00+08:00");
-  start.setDate(start.getDate() - (weekly ? 6 : 27));
-  const from = new Intl.DateTimeFormat("sv-SE", {
-    timeZone: "Asia/Shanghai",
-  }).format(start);
-  return {
-    date,
-    period: weekly ? "近7天" : "当日及近28天",
-    bills: bills().filter((x) => x.date >= from && x.date <= date),
-    store: getSettings(),
-  };
+  return reportFacts(bills(), date, weekly, getSettings());
 }
+
 async function report(date, weekly = false) {
   const input = reportInput(date, weekly);
   if (!input.bills.length) return null;
@@ -161,11 +153,11 @@ async function report(date, weekly = false) {
     return getCache(key).value;
   try {
     const out = await ai("report", input);
-    const v = { ...out, hash: h, updated: new Date().toISOString() };
+    const v = { summary: reportSummary(input, out.summary), hash: h, updated: new Date().toISOString() };
     if (hash(reportInput(date, weekly)) === h) putCache(key, v);
     return v;
   } catch (e) {
-    const v = { error: e.message, hash: h };
+    const v = { error: e.name === "TimeoutError" ? "AI生成超时，请稍后重试" : e.message, hash: h };
     if (hash(reportInput(date, weekly)) === h) putCache(key, v);
     return v;
   }
