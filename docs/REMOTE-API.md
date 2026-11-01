@@ -12,24 +12,23 @@ Base URL：`https://mfjgq.fun/bar-advisor-api`
 
 后端已经部署，你不需要部署 Node、数据库、云函数或另外接入 ChatAnywhere。使用 `https://mfjgq.fun/bar-advisor-api`，完整 API 约定见本文。移除 local-adapter 对业务 API 的 IndexedDB 拦截，云端是唯一数据来源。不要用本地数据、模拟文案或空结果掩盖接口错误。不要自动导入旧账本；保留原本的浏览器数据与旧云端表不动。
 
-### 无登录界面的设备激活
+### 无用户激活流程的服务端接入
 
-1. 单独提供给你的激活码是一次性私密凭证，不可写入 JS、HTML、静态 zip、公开仓库、日志、截图或封面。不要提前在你自己的环境兑换用户的激活码。
-2. 交付时另给用户一个私密激活链接：`应用实际访问地址#bar_activation=激活码`。仅当实际应用可以读取自己的 URL fragment 时采用此方式；若平台将应用放在 iframe 且不传 fragment，先核实平台支持的私密启动参数/身份桥接能力，不要把码硬编码到静态包绕过限制。
-3. 初始化时读取并立即用 history.replaceState 清除 fragment 中的激活码，保存其他原有路由参数；POST `/session/exchange`，JSON `{code}`。返回 `{token,expiresAt}`，token 只保存在当前用户设备的 localStorage 中。然后开始正常业务加载。整个过程不新增可见 UI。
-4. 之后请求使用 `Authorization: Bearer <设备token>`，`credentials: 'omit'`。设备会话有效期90天，激活码7天且只能使用一次；新设备、清除存储或过期后需新激活链接。激活链接持有者可以访问该单店账本，应私下交付。
-5. 无凭证/凭证失效时用原有错误区域提示需要有效专属链接，不要无限刷新或重复兑换。不要创建匿名写接口，不要把服务端主令牌、模型密钥下发浏览器。
-6. 跨域允许 HTTPS Origin、localhost开发Origin及平台沙箱null Origin；服务端依靠 bearer 鉴权，不依靠 Origin 隐藏接口。若平台 CSP 阻止请求，配置 connect-src 加入 API 的 https://mfjgq.fun；若宿主平台不允许则明确报告实际阻塞。
+设备激活码、兑换接口和设备会话已删除。不要新增登录页或激活页面。
+
+在你的平台创建服务端代理/云函数，设置 Secret `BAR_BACKEND_TOKEN`，值由本机私有交接文件提供。浏览器调用平台代理；代理调用本后端时附加 `Authorization: Bearer <BAR_BACKEND_TOKEN>`。代理须使用平台身份或私有应用访问控制确认调用者有权访问这个单店账本。不要把代理做成任何人都能调用的公共转发器，不要信任浏览器传入的目标URL。
+
+密钥只存在于服务端Secret，不进入JS、HTML、静态zip、仓库、日志或截图。前端只替换请求地址/适配层，UI保持原样。如果平台仅支持静态托管，或无法无界面地识别授权用户，应明确报告缺失能力；不能把后端密钥塞进前端来绕过。
+
+CORS不是身份验证。后端支持HTTPS Origin、localhost开发Origin和null沙箱Origin，但所有业务接口仍要求服务端bearer凭证。
 
 ### API 合约
 
-除 health 和 session/exchange 外均需 bearer token。JSON 请求带 Content-Type: application/json。所有路径均相对 Base URL，**不要再追加 /api**。
+除 health 外均需服务端 bearer token。JSON 请求带 Content-Type: application/json。所有路径均相对 Base URL，**不要再追加 /api**。
 
 | 方法 | 路径 | 请求与响应 |
 |---|---|---|
 | GET | /health | `{ok:true,service:"bar-advisor",version:"1"}`，仅连通性检查 |
-| POST | /session/exchange | `{code}` → `{token,expiresAt}` |
-| POST | /session/revoke | `{}` → `{ok:true}`，撤销当前设备凭证 |
 | GET | /state | `{today,bills,settings,reports,campaigns,aiReady}`，与原前端 API 一致 |
 | PUT | /bills | `{date:"YYYY-MM-DD",income:100000,expense:30000,note:"..."}` → `{ok:true}`；收入支出为整数分；同一天覆盖 |
 | DELETE | /bills | JSON `{date}` → `{ok:true}` |
@@ -47,8 +46,8 @@ state.bills 项为 `{date,income,expense,note,updated}`。state.settings 为 `{n
 ### 必要验收
 
 - 真实托管应用中验证预检、带 Authorization 的请求、账单保存/编辑/删除和刷新读回，不以curl或应用封面代替。
-- 两个分别授权的设备读取同一账本；未经授权设备401。
+- 通过平台授权入口在两个设备读取同一账本；未经授权请求被代理或后端拒绝。
 - 验证真实日报、热点与整套营销内容；必要的小量AI调用即可。
 - 同一浏览器/视口/数据下与仓库UI截图比较，包括月历、弹层、四个Tab；不要只靠文件哈希判断视觉一致。
-- 不删旧数据、不消耗用户激活码做自动测试；测试凭证须单独申请。
-- 最终交付应用链接、私密激活链接、实际完成/仍受限功能及仅涉及连接层的改动清单。若缺少平台能力，给具体报错证据，禁止降级为本地预览版后宣布完成。
+- 不删旧数据，不向浏览器下发后端密钥。
+- 最终交付应用链接、实际完成/仍受限功能及仅涉及连接层的改动清单。若缺少平台能力，给具体报错证据，禁止降级为本地预览版后宣布完成。

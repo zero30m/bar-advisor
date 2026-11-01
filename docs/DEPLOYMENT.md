@@ -77,11 +77,7 @@ ssh -N -L 4317:127.0.0.1:4317 bar@你的服务器地址
 
 服务：`bar-advisor.service`，开机启动、失败重启、内存上限384MB、CPU上限30%。数据库一致性备份由独立 `bar-advisor-backup.timer` 每日执行，保留最近7份于 `/var/backups/bar-advisor`（同机备份，不防整机丢失）。
 
-创建新设备激活码（输出属私密信息，不能提交Git）：
-
-```sh
-sudo -u bar-advisor env DB_PATH=/var/lib/bar-advisor/bar.sqlite /opt/bar-advisor/runtime/bin/node /opt/bar-advisor/app/scripts/create-activation.mjs
-```
+设备激活机制已移除。接入方把后端令牌存入自己的服务端Secret，通过有访问控制的服务端代理调用。用户端无需激活码。
 
 运维：`sudo systemctl status bar-advisor`；日志 `sudo journalctl -u bar-advisor`。更新只替换本应用代码并重启bar-advisor，禁止重启其他应用。停用时移除专属Nginx include并校验后平滑reload，停用本应用及备份timer即可；无需停止其他网站。
 
