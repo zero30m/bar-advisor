@@ -67,11 +67,25 @@ ssh -N -L 4317:127.0.0.1:4317 bar@你的服务器地址
 
 保持 SSH 连接，用本机浏览器打开 http://127.0.0.1:4317/ 。若本机端口占用，将隧道左侧端口改为 4318，然后浏览 http://127.0.0.1:4318/ 。不要开放服务器的 4317 端口。
 
-## 3. 公网域名部署的限制
+## 3. 独立公网 API（已部署版本）
 
-公开 GitHub 仓库不等于网站已公开部署。当前版本限制回环 Host/Origin，且没有账号系统。不能直接部署到 GitHub Pages；静态托管无法执行 Node、SQLite 和后台任务。
+公网接入文档：[REMOTE-API.md](REMOTE-API.md)。本地模式仍保留回环限制；远程模式额外启用 bearer 认证，只提供 API，不提供静态前端。
 
-若需要任意手机通过域名登录，后续必须增加或配置认证网关、HTTPS、准确的 Host/Origin 允许列表、持久存储和备份。现有代码不能直接放到普通反向代理后就宣称安全可用。本仓库不提供未经验证的公网部署捷径。
+部署变量：`BAR_REMOTE_MODE=1`、随机高强度 `BAR_API_TOKEN`（至少40字符）、`HOST=127.0.0.1`、独立 `PORT`、持久 `DB_PATH`，以及原AI配置。仅绑定回环，通过HTTPS反向代理访问，代理Host必须设置为回环Host，转发Authorization。禁止将凭证加入公开仓库。
+
+实际服务器使用独立用户 `bar-advisor`、`/opt/bar-advisor/app`、独立Node24运行时、`/etc/bar-advisor/service.env`、`/var/lib/bar-advisor/bar.sqlite`、端口4319。公网路径 `/bar-advisor-api/` 转发至 `http://127.0.0.1:4319/api/`。Nginx限速5请求/秒、突发20；API禁止CDN缓存。保持原有网站路由和系统Node不变。
+
+服务：`bar-advisor.service`，开机启动、失败重启、内存上限384MB、CPU上限30%。数据库一致性备份由独立 `bar-advisor-backup.timer` 每日执行，保留最近7份于 `/var/backups/bar-advisor`（同机备份，不防整机丢失）。
+
+创建新设备激活码（输出属私密信息，不能提交Git）：
+
+```sh
+sudo -u bar-advisor env DB_PATH=/var/lib/bar-advisor/bar.sqlite /opt/bar-advisor/runtime/bin/node /opt/bar-advisor/app/scripts/create-activation.mjs
+```
+
+运维：`sudo systemctl status bar-advisor`；日志 `sudo journalctl -u bar-advisor`。更新只替换本应用代码并重启bar-advisor，禁止重启其他应用。停用时移除专属Nginx include并校验后平滑reload，停用本应用及备份timer即可；无需停止其他网站。
+
+公网边缘HTTPS已验证。已有站点源站证书显示2026-06-15过期，本次没有修改旧证书；其续期应由原站点维护者单独处理，避免影响现有域名/CDN配置。
 
 ## 4. 数据、计划任务与更新
 

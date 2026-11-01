@@ -1,0 +1,9 @@
+[Unit]
+Description=Bar Advisor SQLite backup
+[Service]
+Type=oneshot
+User=bar-advisor
+Group=bar-advisor
+ExecStart=/usr/bin/python3 /opt/bar-advisor/app/backup.py
+UMask=0077
+NoNewPrivileges=true

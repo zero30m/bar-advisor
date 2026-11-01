@@ -1,0 +1,27 @@
+[Unit]
+Description=Bar Advisor isolated backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bar-advisor
+Group=bar-advisor
+WorkingDirectory=/opt/bar-advisor/app
+EnvironmentFile=/etc/bar-advisor/service.env
+ExecStart=/opt/bar-advisor/runtime/bin/node --max-old-space-size=192 server.mjs
+Restart=on-failure
+RestartSec=5
+MemoryMax=384M
+CPUQuota=30%
+TasksMax=32
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/bar-advisor
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

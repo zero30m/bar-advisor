@@ -1,4 +1,5 @@
 import http from "node:http";
+import { accessGate } from "./deploy/access.mjs";
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync, mkdirSync, existsSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
@@ -12,6 +13,7 @@ const db = new DatabaseSync(
 db.exec(
   `PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS bills(date TEXT PRIMARY KEY,income INTEGER NOT NULL,expense INTEGER NOT NULL,note TEXT NOT NULL DEFAULT '',updated TEXT NOT NULL); CREATE TABLE IF NOT EXISTS cache(key TEXT PRIMARY KEY,value TEXT NOT NULL,updated INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS usage(day TEXT PRIMARY KEY,count INTEGER NOT NULL DEFAULT 0); CREATE TABLE IF NOT EXISTS campaigns(id TEXT PRIMARY KEY,title TEXT NOT NULL,content TEXT NOT NULL,created TEXT NOT NULL); CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);`,
 );
+const remoteGate = process.env.BAR_REMOTE_MODE === "1" ? accessGate(db) : null;
 const today = () =>
   new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Shanghai" }).format(
     new Date(),
@@ -164,7 +166,7 @@ async function report(date, weekly = false) {
     return v;
   } catch (e) {
     const v = { error: e.message, hash: h };
-    putCache(key, v);
+    if (hash(reportInput(date, weekly)) === h) putCache(key, v);
     return v;
   }
 }
@@ -304,10 +306,14 @@ const server = http.createServer(async (req, res) => {
     const host = req.headers.host;
     if (!/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host || ""))
       return send(res, 403, { error: "仅支持本机访问" });
-    if (req.headers.origin && req.headers.origin !== `http://${host}`)
+    if (!remoteGate && req.headers.origin && req.headers.origin !== `http://${host}`)
       return send(res, 403, { error: "不允许跨域访问" });
     const url = new URL(req.url, `http://${host}`);
     const p = url.pathname;
+    if (remoteGate) {
+      if (!p.startsWith("/api/")) return send(res,404,{error:"API only"});
+      if (!(await remoteGate(req,res,p))) return;
+    }
     if (p.startsWith("/api/")) {
       if (p === "/api/state" && req.method === "GET") {
         const date = today();

@@ -37,7 +37,7 @@ const req = async (p, method = "GET", data) => {
   return { status: r.status, body: await r.json() };
 };
 const stop = (p) =>
-  new Promise((r) => {
+  p.exitCode !== null || p.signalCode !== null ? Promise.resolve() : new Promise((r) => {
     p.once("exit", r);
     p.kill();
   });
