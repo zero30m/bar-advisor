@@ -1,5 +1,5 @@
 import {businessDay} from './business-calendar.mjs';
-export const REPORT_VERSION='operating-analysis-v3.1';
+export const REPORT_VERSION='plain-analysis-v4';
 export const yuan=cents=>(cents/100).toFixed(2);
 const shift=(date,n)=>{const d=new Date(date+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);};
 const days=(start,end)=>Math.round((new Date(end+'T00:00:00Z')-new Date(start+'T00:00:00Z'))/86400000)+1;
@@ -61,22 +61,35 @@ export function reportFacts(rows,date,weekly,store){
   bills:selected.map(r=>({date:r.date,incomeYuan:yuan(r.income),expenseYuan:yuan(r.expense),cashDifferenceYuan:yuan(r.income-r.expense),note:r.note,calendar:businessDay(r.date)})),
   store:{name:store.name,investmentYuan:investment.toFixed(2),targetMonths:months}};
 }
-export function reportSummary(input, output){
- const e=input.evidence;
- const sections=[e.overview,e.calendar,[e.previous,e.sameWeekday,e.year].filter(Boolean).join(''),e.target+e.month+(e.sensitivity||'')];
- const observations=Array.isArray(output?.observations)?output.observations:[];
- const safe=text=>typeof text==='string'&&text.length>3&&text.length<=160&&!/[\d%％万元亿]|仅运营|刚开业|初始阶段|提升顾客体验|强化员工培训|无酒精|口味匹配/u.test(text);
- const valid=observations.filter(o=>o&&e[o.evidenceId]).map(o=>({interpretation:safe(o.interpretation)&&!e[o.evidenceId].includes('暂不可算')&&(o.evidenceId!=='calendar'||e.calendar.includes('日均收入'))?o.interpretation:'',action:safe(o.action)?o.action:''})).filter(o=>o.action).slice(0,2);
- if(valid.length)sections.push(valid.map(o=>o.interpretation+'建议：'+o.action).join(''));
- else{
-  const advice=[];
-  if(!input.comparisons.previous.complete)advice.push('先补齐对照期账单，或核实缺失日期是否停业，再判断营业变化。');
-  if(!input.month.complete)advice.push('当月仍有漏记日期，应先对账补齐，不能把已记录金额直接作为完整经营进度。');
-  else if(input.payback.scenarios.length&&Number(input.payback.scenarios[0].progressPercent)<input.month.elapsedDays/input.month.calendarDays*100)advice.push('已记录收入低于均匀日历进度参考，先核对后续周末及节日的预订，拆解客流和客单价需求，而非只靠降价追营业额。');
-  if(Number(input.focus.cashDifferenceYuan)<0)advice.push('本期支出高于收入，先区分集中采购、固定支出和一次性付款，再决定是否压缩可变支出。');
-  if(!advice.length)advice.push('结合对照期活动记录核查收入变化来源，并核对采购、房租与人工的付款时点是否扭曲当期差额。');
-  sections.push(advice.slice(0,2).join(''));
- }
- sections.push('口径：已记录收支差额用于现金观察；回本情景需以扣齐成本后的净利润验证，10%不是实际净利率。');
- return sections.join('\n\n');
+const plainMoney=n=>{const v=Number(n);return Math.abs(v)>=10000?Number((v/10000).toFixed(2))+'万元':Number(v.toFixed(2))+'元';};
+export function reportWriting(input){
+ const f=input.focus,p=input.payback;
+ const tokens={income:plainMoney(f.incomeYuan),expense:plainMoney(f.expenseYuan),balance:plainMoney(Math.abs(Number(f.cashDifferenceYuan))),days:String(f.recordedDays)};
+ if(p.monthlyNetProfitTargetYuan!==null){tokens.investment=plainMoney(p.investmentYuan);tokens.months=String(p.targetMonths);tokens.profitTarget=plainMoney(p.monthlyNetProfitTargetYuan);tokens.revenueTarget=plainMoney(p.scenarios[0].monthlyRevenueTargetYuan);tokens.margin='10%';}
+ for(const [key,value] of Object.entries(input.comparisons))if(value.complete&&value.incomeChangePercent!==null)tokens[key+'Change']=direction(value.incomeChangePercent);
+ return {tokens,style:'老板能直接看懂的简短复盘，两小段，通常120到200字；只讲最重要的两三件事。',balanceMeaning:Number(f.cashDifferenceYuan)>=0?'记下的收入减去支出后剩下':'记下的支出比收入多',missing:input.weekly?f.recordedDays<7:!input.comparisons.previous.complete};
+}
+function plainFallback(input){
+ const t=reportWriting(input).tokens,f=input.focus;
+ const opening=input.weekly?'这周目前记了'+t.days+'天账':'这天';
+ const money=opening+'，收入'+t.income+'，支出'+t.expense+'，'+(Number(f.cashDifferenceYuan)>=0?'账面还剩':'支出比收入多了')+t.balance+'。';
+ let detail='';
+ const comparison=input.comparisons.sameWeekday?.complete?input.comparisons.sameWeekday:input.comparisons.previous;
+ if(comparison.complete&&comparison.incomeChangePercent!==null)detail='收入'+comparison.label+direction(comparison.incomeChangePercent)+'。';
+ else detail=input.weekly&&f.recordedDays<7?'先把这周剩下的账补齐，才看得出整周生意有没有变好。':'还缺少可对比的记录，先把前面的账补齐。';
+ if(t.profitTarget)detail+='想在'+t.months+'个月收回'+t.investment+'，平均每月要净赚'+t.profitTarget+'；按'+t.margin+'的净利率估算，每月营业额大约要到'+t.revenueTarget+'。';
+ return money+'\n\n'+detail;
+}
+export function reportSummary(input,output){
+ const tokens=reportWriting(input).tokens;
+ const text=output?.summary;
+ if(typeof text!=='string'||text.length>650||!text.includes('{{income}}')||!text.includes('{{expense}}'))return plainFallback(input);
+ let invalid=false;
+ const stripped=text.replace(/\{\{([a-zA-Z]+)\}\}/g,(_,key)=>{if(tokens[key]===undefined)invalid=true;return '';});
+ // Only program-supplied number tokens may enter the narrative. Reject invented financial amounts.
+ if(invalid||/[0-9%％]|[零〇一二两三四五六七八九十百千]+(?:万元|元|亿元|倍|成)|口径：|不代表.*承诺|核查|均匀.*进度|运营日|销售潜力|市场环境|内部管理问题/.test(stripped))return plainFallback(input);
+ if(text.includes('{{revenueTarget}}')&&!text.includes('{{margin}}'))return plainFallback(input);
+ const result=text.replace(/\{\{([a-zA-Z]+)\}\}/g,(_,key)=>tokens[key]);
+ if(result.length>320)return plainFallback(input);
+ return result.trim();
 }

@@ -6,9 +6,9 @@ test('fen are converted to yuan and model cannot replace deterministic financial
  const input=reportFacts([{date:'2026-11-01',income:300000,expense:10000,note:''}],'2026-11-01',false,store);
  assert.equal(input.focus.cashDifferenceYuan,'2900.00');assert.equal(input.bills[0].incomeYuan,'3000.00');
  const output=reportSummary(input,'收入30万元，净利润29万元');
- assert.match(output,/收入3000.00元，支出100.00元，收支差额2900.00元/);assert.ok(!output.includes('万元'));
+ assert.match(output,/收入3000元，支出100元，账面还剩2900元/);assert.ok(!output.includes('收入30万元'));
  const exact=reportFacts([{date:'2026-11-01',income:50000,expense:20000,note:''}],'2026-11-01',false,store);
- assert.match(reportSummary(exact,'利润三十万元'),/收支差额300.00元/);
+ assert.match(reportSummary(exact,'利润三十万元'),/账面还剩300元/);
 });
 test('weekly sum includes only seven Shanghai business dates, preserves cents and negatives',()=>{
  const rows=[{date:'2026-10-25',income:999999,expense:0},{date:'2026-10-26',income:101,expense:202},{date:'2026-11-01',income:100,expense:0}];
@@ -40,16 +40,16 @@ test('official holiday, makeup workday and unknown future calendars are distinct
  assert.equal(businessDay('2026-11-01').type,'weekend');
  assert.equal(businessDay('2030-10-01').calendarVerified,false);
 });
-test('weekly ratios require two complete periods and advice must cite an available evidence key',()=>{
+test('complete comparisons stay available but concise narrative uses validated number tokens',()=>{
  const rows=Array.from({length:14},(_,i)=>({date:'2026-10-'+String(i+1).padStart(2,'0'),income:i<7?10000:20000,expense:5000}));
  const f=reportFacts(rows,'2026-10-14',true,store);assert.equal(f.comparisons.previous.incomeChangePercent,'100.0');
- const output=reportSummary(f,{observations:[{evidenceId:'previous',interpretation:'收入趋势有所改善，需核查是否来自临时活动。',action:'对照活动记录与到店人数，区分客流和客单价变化。'}]});
- assert.match(output,/对照活动记录/);assert.match(output,/增长100.0%/);
- const bad=reportSummary(f,{observations:[{evidenceId:'fake',interpretation:'利润900万元',action:'继续投入'}]});assert.ok(!bad.includes('900万元'));
+ const output=reportSummary(f,{summary:'这周收入{{income}}，支出{{expense}}，账面还剩{{balance}}。收入较前周{{previousChange}}，可以看看哪场活动带来了更多收入。'});
+ assert.match(output,/增长100.0%/);assert.ok(!output.includes('{{'));
 });
-
-test('calendar without comparable sample cannot produce a claimed revenue expectation',()=>{
- const f=reportFacts([{date:'2026-11-01',income:30000,expense:0}],'2026-11-01',false,store);
- const text=reportSummary(f,{observations:[{evidenceId:'calendar',interpretation:'尽管周末收入仍低于预期。',action:'补齐历史同类型日期的账单再做判断。'}]});
- assert.ok(!text.includes('尽管周末'));assert.ok(text.includes('补齐历史'));
+test('short reports reject invented amounts and remove defensive boilerplate',()=>{
+ const f=reportFacts([{date:'2026-11-01',income:300000,expense:10000}],'2026-11-02',true,{...store,investment:300000});
+ const summary=reportSummary(f,{summary:'收入{{income}}，支出{{expense}}，净赚30万元。'});
+ assert.match(summary,/收入3000元/);assert.ok(summary.length<220);assert.ok(!/口径|同比|日历进度|不代表|净赚30万元/.test(summary));
+ const clean=reportSummary(f,{summary:'这周目前记了{{days}}天账，收入{{income}}，支出{{expense}}，账面还剩{{balance}}。先把剩下的账补齐，再看整周生意怎么样。'});
+ assert.match(clean,/记了1天账/);
 });

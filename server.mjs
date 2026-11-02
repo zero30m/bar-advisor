@@ -1,5 +1,5 @@
 import http from "node:http";
-import { reportFacts, reportSummary } from "./report-finance.mjs";
+import { reportFacts, reportSummary, reportWriting } from "./report-finance.mjs";
 import { accessGate } from "./deploy/access.mjs";
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync, mkdirSync, existsSync } from "node:fs";
@@ -79,7 +79,8 @@ async function ai(kind, input) {
     ).run(day);
     const tasks = {
       report:
-        '返回JSON对象 {"observations":[{"evidenceId":"month","interpretation":"根据该证据解释目前最值得关注的问题，最多90字","action":"对应的具体核查或执行动作，最多90字"}]}，只给最重要的两项。evidenceId只能从previous、sameWeekday、year、calendar、target、month中选择输入中存在的一项，不可使用payback。记录一天不等于只运营一天或刚开业；月初不得直接拿当日收入与整月目标比较，必须结合日历进度，且日历进度仅是均匀参考，不能假定每天营业额相同。正确无数字表达示例：interpretation为“已记录收入低于均匀进度参考，需核查后续高峰日能否补足。”、action为“对照后续周末预订和包场记录，拆解需要的客流与客单价。”；禁止输出具体日期数字、万元金额或百分比。你是酒吧经营分析师而非营销文案助手。先阅读comparisons的complete和month.complete；漏记不等于停业或零收入，对照缺失不得说增长下滑。结合周末、节假日、调休与同类型样本解释可比性，但不能断言是假期导致了变化。结合投资、目标回本月数、净利率情景、目标进度提出经营判断。营业收入不是净利润，支出可能是集中付款。没有客流、客单价、毛利、库存、房租人工明细时不可编造原因、真实利润率、盈亏平衡点或实际回本期；用“核查”而非定论。程序会展示evidence内所有精确数字，你只补充解释和动作，不重新计算、不重复数字，不使用阿拉伯数字、百分号或自编中文金额。禁止泛泛的提升顾客体验、强化员工培训、增加无酒精饮品、举办口味匹配活动、提升回头率等套话，除非账单备注提供直接证据。缺少对照时指出需要补齐哪些期间；收入有可比下降时建议分别核查到店人数与客单价；现金差额为负时先区分采购、固定支出与一次性付款。相同数据应得出一致结论，日期、目标或结构变化才调整判断，不随机制造新结论。',
+        '返回JSON对象 {"summary":"给酒吧老板看的简短复盘"}。直接写完整复盘，不写提纲、不写observations。用自然口语，通常120到200字，最多两小段，像懂账的合伙人说重点。先说这次实际记下的收入支出和剩下多少钱，再选最重要的一项比较或目标解释，最后最多一个具体动作。所有数字必须使用writing.tokens对应的占位符，如{{income}}、{{expense}}、{{balance}}，不能自行写数字、换算、加单位；income和expense必须出现，balance只是已记录收入减支出，不称为净赚。days/months占位符需在后面加天/月。其他金额占位符已经带单位。存在完整对照时可用{{previousChange}}或{{sameWeekdayChange}}或{{yearChange}}，没有则不编造。记录不足时只说“这周还没记全，先把剩下的账补齐”，不能罗列本期几分之几、对照缺失、同比注意事项，不能判断业绩不达标。仅有周末标签不意味着生意应更好，节假日只有能解释实际可比数据时才提。回本目标只讲一个最直观的数；如需要营业额目标，可说“想在{{months}}个月收回{{investment}}，平均每月要净赚{{profitTarget}}；按{{margin}}净利率估算，每月营业额大约要到{{revenueTarget}}。”不要堆15%和20%情景，不说日历进度、自然日日均、静态回本、口径、风险提示或免责声明。不要把evidence逐条复述。禁止“需核查”“评估销售潜力”“强化员工培训”“提升顾客体验”等套话，禁止无依据推断市场环境、管理问题或开业时间。内部的缺失值、财务定义、计算限制用于判断，不要作为一大段内容输出。没有足够数据就短说，不为显得专业硬凑内容。',
+
       campaign:
         '返回 JSON 对象 {"title":"18字内活动名","concept":"活动策划，含客群、玩法、时间、定价与成本边界，200字内","social":"朋友圈文案，120字内","creator":"博主合作邀约文案，120字内","poster":"海报主标题，12字内","checklist":["准备动作","现场动作","复盘动作"]}。基于所选热点制作可执行方案，不虚构热点事实，不要求使用侵权音乐或图片。',
     };
@@ -119,7 +120,7 @@ async function ai(kind, input) {
     } catch {
       throw new Error("AI 返回格式异常，请稍后重试");
     }
-    if (kind === "report" && !Array.isArray(output.observations))
+    if (kind === "report" && typeof output.summary !== "string")
       throw new Error("复盘格式异常");
     if (
       kind === "campaign" &&
@@ -141,7 +142,8 @@ async function ai(kind, input) {
   }
 }
 function reportInput(date, weekly = false) {
-  return reportFacts(bills(), date, weekly, getSettings());
+  const facts = reportFacts(bills(), date, weekly, getSettings());
+  return { ...facts, writing: reportWriting(facts) };
 }
 
 async function report(date, weekly = false) {
