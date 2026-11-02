@@ -79,7 +79,7 @@ async function ai(kind, input) {
     ).run(day);
     const tasks = {
       report:
-        '返回 JSON 对象 {"summary":"不超过80字的经营行动建议"}。金额已由代码计算，输入金额全部为人民币元。你的建议禁止包含任何数字、数量词、金额、百分比、倍数、万元或利润估算，不复述财务数字。只根据实际数据提出定性的具体行动建议，不编造经营原因。',
+        '返回JSON对象 {"observations":[{"evidenceId":"month","interpretation":"根据该证据解释目前最值得关注的问题，最多90字","action":"对应的具体核查或执行动作，最多90字"}]}，只给最重要的两项。evidenceId只能从previous、sameWeekday、year、calendar、target、month中选择输入中存在的一项，不可使用payback。记录一天不等于只运营一天或刚开业；月初不得直接拿当日收入与整月目标比较，必须结合日历进度，且日历进度仅是均匀参考，不能假定每天营业额相同。正确无数字表达示例：interpretation为“已记录收入低于均匀进度参考，需核查后续高峰日能否补足。”、action为“对照后续周末预订和包场记录，拆解需要的客流与客单价。”；禁止输出具体日期数字、万元金额或百分比。你是酒吧经营分析师而非营销文案助手。先阅读comparisons的complete和month.complete；漏记不等于停业或零收入，对照缺失不得说增长下滑。结合周末、节假日、调休与同类型样本解释可比性，但不能断言是假期导致了变化。结合投资、目标回本月数、净利率情景、目标进度提出经营判断。营业收入不是净利润，支出可能是集中付款。没有客流、客单价、毛利、库存、房租人工明细时不可编造原因、真实利润率、盈亏平衡点或实际回本期；用“核查”而非定论。程序会展示evidence内所有精确数字，你只补充解释和动作，不重新计算、不重复数字，不使用阿拉伯数字、百分号或自编中文金额。禁止泛泛的提升顾客体验、强化员工培训、增加无酒精饮品、举办口味匹配活动、提升回头率等套话，除非账单备注提供直接证据。缺少对照时指出需要补齐哪些期间；收入有可比下降时建议分别核查到店人数与客单价；现金差额为负时先区分采购、固定支出与一次性付款。相同数据应得出一致结论，日期、目标或结构变化才调整判断，不随机制造新结论。',
       campaign:
         '返回 JSON 对象 {"title":"18字内活动名","concept":"活动策划，含客群、玩法、时间、定价与成本边界，200字内","social":"朋友圈文案，120字内","creator":"博主合作邀约文案，120字内","poster":"海报主标题，12字内","checklist":["准备动作","现场动作","复盘动作"]}。基于所选热点制作可执行方案，不虚构热点事实，不要求使用侵权音乐或图片。',
     };
@@ -119,7 +119,7 @@ async function ai(kind, input) {
     } catch {
       throw new Error("AI 返回格式异常，请稍后重试");
     }
-    if (kind === "report" && typeof output.summary !== "string")
+    if (kind === "report" && !Array.isArray(output.observations))
       throw new Error("复盘格式异常");
     if (
       kind === "campaign" &&
@@ -153,7 +153,7 @@ async function report(date, weekly = false) {
     return getCache(key).value;
   try {
     const out = await ai("report", input);
-    const v = { summary: reportSummary(input, out.summary), hash: h, updated: new Date().toISOString() };
+    const v = { summary: reportSummary(input, out), hash: h, updated: new Date().toISOString() };
     if (hash(reportInput(date, weekly)) === h) putCache(key, v);
     return v;
   } catch (e) {
