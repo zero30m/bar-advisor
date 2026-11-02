@@ -1,5 +1,5 @@
 import {businessDay} from './business-calendar.mjs';
-export const REPORT_VERSION='plain-analysis-v4';
+export const REPORT_VERSION='focused-analysis-v5';
 export const yuan=cents=>(cents/100).toFixed(2);
 const shift=(date,n)=>{const d=new Date(date+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);};
 const days=(start,end)=>Math.round((new Date(end+'T00:00:00Z')-new Date(start+'T00:00:00Z'))/86400000)+1;
@@ -65,7 +65,13 @@ const plainMoney=n=>{const v=Number(n);return Math.abs(v)>=10000?Number((v/10000
 export function reportWriting(input){
  const f=input.focus,p=input.payback;
  const tokens={income:plainMoney(f.incomeYuan),expense:plainMoney(f.expenseYuan),balance:plainMoney(Math.abs(Number(f.cashDifferenceYuan))),days:String(f.recordedDays)};
- if(p.monthlyNetProfitTargetYuan!==null){tokens.investment=plainMoney(p.investmentYuan);tokens.months=String(p.targetMonths);tokens.profitTarget=plainMoney(p.monthlyNetProfitTargetYuan);tokens.revenueTarget=plainMoney(p.scenarios[0].monthlyRevenueTargetYuan);tokens.margin='10%';}
+ if(p.scenarios.length){
+  const goal=p.scenarios[0];
+  tokens.recordedMonthIncome=plainMoney(input.month.incomeYuan);
+  tokens.recordedGoalGap=plainMoney(goal.remainingRevenueYuan);
+  if(input.month.complete)tokens.goalProgress=Number(goal.progressPercent)+'%';
+ }
+
  for(const [key,value] of Object.entries(input.comparisons))if(value.complete&&value.incomeChangePercent!==null)tokens[key+'Change']=direction(value.incomeChangePercent);
  return {tokens,style:'老板能直接看懂的简短复盘，两小段，通常120到200字；只讲最重要的两三件事。',balanceMeaning:Number(f.cashDifferenceYuan)>=0?'记下的收入减去支出后剩下':'记下的支出比收入多',missing:input.weekly?f.recordedDays<7:!input.comparisons.previous.complete};
 }
@@ -77,18 +83,17 @@ function plainFallback(input){
  const comparison=input.comparisons.sameWeekday?.complete?input.comparisons.sameWeekday:input.comparisons.previous;
  if(comparison.complete&&comparison.incomeChangePercent!==null)detail='收入'+comparison.label+direction(comparison.incomeChangePercent)+'。';
  else detail=input.weekly&&f.recordedDays<7?'先把这周剩下的账补齐，才看得出整周生意有没有变好。':'还缺少可对比的记录，先把前面的账补齐。';
- if(t.profitTarget)detail+='想在'+t.months+'个月收回'+t.investment+'，平均每月要净赚'+t.profitTarget+'；按'+t.margin+'的净利率估算，每月营业额大约要到'+t.revenueTarget+'。';
  return money+'\n\n'+detail;
 }
 export function reportSummary(input,output){
  const tokens=reportWriting(input).tokens;
  const text=output?.summary;
- if(typeof text!=='string'||text.length>650||!text.includes('{{income}}')||!text.includes('{{expense}}'))return plainFallback(input);
+ if(typeof text!=='string'||text.length>650||!text.includes('{{'))return plainFallback(input);
  let invalid=false;
  const stripped=text.replace(/\{\{([a-zA-Z]+)\}\}/g,(_,key)=>{if(tokens[key]===undefined)invalid=true;return '';});
  // Only program-supplied number tokens may enter the narrative. Reject invented financial amounts.
  if(invalid||/[0-9%％]|[零〇一二两三四五六七八九十百千]+(?:万元|元|亿元|倍|成)|口径：|不代表.*承诺|核查|均匀.*进度|运营日|销售潜力|市场环境|内部管理问题/.test(stripped))return plainFallback(input);
- if(text.includes('{{revenueTarget}}')&&!text.includes('{{margin}}'))return plainFallback(input);
+ if(!input.month.complete&&text.includes('{{recordedGoalGap}}')&&!/已记|记下|记录/.test(text))return plainFallback(input);
  const result=text.replace(/\{\{([a-zA-Z]+)\}\}/g,(_,key)=>tokens[key]);
  if(result.length>320)return plainFallback(input);
  return result.trim();
