@@ -385,18 +385,23 @@ async function generateCampaign(title) {
     pendingCampaign = false;
   }
 }
+function campaignMarkup(text) {
+  return '<div class="campaign-prose">' + String(text ?? '').trim().split(/\n\s*\n/).filter(Boolean).map(paragraph =>
+    '<p>' + esc(paragraph).replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>') + '</p>'
+  ).join('') + '</div>';
+}
 function openCampaign(c) {
   if (!c) return;
   const d = c.content;
   showSheet(
     c.title,
-    `<p class="eyebrow">活动方案</p><p class="campaign-copy">${esc(d.concept)}</p>${[
+    `<p class="eyebrow">活动方案</p>${campaignMarkup(d.concept)}${[
       ["social", "朋友圈文案"],
       ["creator", "博主推广文案"],
     ]
       .map(
         ([k, t]) =>
-          `<div class="copy-head"><h3>${t}</h3><button class="link" data-copy="${k}">复制 ↗</button></div><p class="campaign-copy">${esc(d[k])}</p>`,
+          `<div class="copy-head"><h3>${t}</h3><button class="link" data-copy="${k}">复制 ↗</button></div>${campaignMarkup(d[k])}`,
       )
       .join(
         "",
