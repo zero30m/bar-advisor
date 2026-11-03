@@ -1,5 +1,5 @@
 import {businessDay} from './business-calendar.mjs';
-export const REPORT_VERSION='natural-analysis-v10';
+export const REPORT_VERSION='natural-analysis-v11';
 export const yuan=cents=>(cents/100).toFixed(2);
 const shift=(date,n)=>{const d=new Date(date+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);};
 const days=(start,end)=>Math.round((new Date(end+'T00:00:00Z')-new Date(start+'T00:00:00Z'))/86400000)+1;

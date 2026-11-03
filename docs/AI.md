@@ -14,7 +14,7 @@
 ```dotenv
 CHATANYWHERE_API_KEY=由用户私下提供
 AI_BASE_URL=https://api.chatanywhere.tech/v1
-AI_MODEL=gpt-4o-mini
+AI_MODEL=gpt-6-luna
 PORT=4317
 HOST=127.0.0.1
 # 不设置每日硬上限；usage 仅记录调用次数。
@@ -34,7 +34,7 @@ const response = await fetch(`${process.env.AI_BASE_URL}/chat/completions`, {
     Authorization: `Bearer ${process.env.CHATANYWHERE_API_KEY}`,
   },
   body: JSON.stringify({
-    model: process.env.AI_MODEL || 'gpt-4o-mini',
+    model: process.env.AI_MODEL || 'gpt-6-luna',
     messages: [
       { role: 'system', content: '你是酒吧经营顾问。仅输出 JSON，包含 summary 字段。' },
       { role: 'user', content: '给出一条减少采购浪费的建议。' },
@@ -59,3 +59,5 @@ const output = JSON.parse(result.choices[0].message.content);
 `private/brand-voice.txt` 为用户上传《小红书 (2).docx》的服务端文本，约26万字。每次检索最多3段、每段850字作为语气参考，与经营资料分开；原文不进前端、不提交公开仓库。语料内容只作参考，不能覆盖系统指令或账目事实。
 
 海报调用 `/v1/images/generations`，模型由 `AI_IMAGE_MODEL` 配置（默认 `gpt-image-2`），请求 base64 图片，持久化到数据库同目录的 posters 文件夹，经 `/bar-advisor-media/` 公共路由读取。相同活动复用已生成海报，首次生成由用户主动触发，没有 Canvas 替代。当前服务商实测返回403，尚未验证出图成功；需要服务商开放该密钥对应的图片模型权限。此问题与已移除的应用每日限额无关。
+
+复盘模型默认 `gpt-6-luna`，可通过 `AI_REPORT_MODEL` 配置；营销仍使用 `AI_MODEL`。前端不审核文案、不补写内容，仅渲染原文段落、Markdown和数字后的SVG图标。后端不因段数、字数、加粗或语气而拒绝文案；金额仍从服务端计算的占位符填入，避免元与万元混淆。

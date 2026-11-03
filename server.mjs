@@ -69,10 +69,10 @@ function retrieve(query) {
     .map((x) => x.t)
     .join("\n---\n");
 }
-const COPY_VERSION = 'natural-copy-v10';
+const COPY_VERSION = 'natural-copy-v11';
 const inflight = new Map();
 async function ai(kind, input) {
-  const key = "ai:" + hash([COPY_VERSION, voiceVersion, kind, input]);
+  const key = "ai:" + hash([COPY_VERSION, voiceVersion, process.env.AI_MODEL || "gpt-6-luna", process.env.AI_REPORT_MODEL || "gpt-6-luna", kind, input]);
   if (getCache(key)) return getCache(key).value;
   if (inflight.has(key)) return inflight.get(key);
   const job = (async () => {
@@ -102,12 +102,14 @@ async function ai(kind, input) {
           Authorization: `Bearer ${process.env.CHATANYWHERE_API_KEY}`,
         },
         body: JSON.stringify({
-          model: process.env.AI_MODEL || "gpt-4o-mini",
+          model: kind === "report" ? (process.env.AI_REPORT_MODEL || "gpt-6-luna") : (process.env.AI_MODEL || "gpt-6-luna"),
           messages: [
             { role: "system", content: system },
             { role: "user", content: JSON.stringify(kind === "report" ? {
               period:input.weekly ? "近七天" : "当天", date:input.date,
-              tokens:input.writing.tokens, balanceMeaning:input.writing.balanceMeaning,
+              tokens:input.writing.tokens,
+              meanings:{income:"本期总收入，周报为完整七天或其中有账日的合计",expense:"本期总支出",balance:"本期收入减支出的绝对金额，符号看balanceMeaning",recordedMonthIncome:"本月累计收入，绝不是上月或本周收入",recordedGoalGap:"本月累计收入距离估算月营业额目标的差额",goalProgress:"本月累计收入占估算月营业额目标的比例",previousChange:input.weekly?"前七天对比涨跌":"昨天对比涨跌",yearChange:"去年同期对比涨跌",sameWeekdayChange:"上周同一天对比涨跌"},
+              balanceMeaning:input.writing.balanceMeaning,
               availableComparisons:Object.fromEntries(Object.entries(input.comparisons).filter(([,v])=>v.complete && v.incomeChangePercent!==null).map(([k,v])=>[k,{label:v.label}])),
               unavailableComparisons:Object.entries(input.comparisons).filter(([,v])=>!v.complete || v.incomeChangePercent===null).map(([,v])=>v.label),
               monthRecordsComplete:input.month.complete,
@@ -163,7 +165,7 @@ async function ai(kind, input) {
 }
 function reportInput(date, weekly = false) {
   const facts = reportFacts(bills(), date, weekly, getSettings());
-  return { ...facts, voiceVersion, writing: reportWriting(facts) };
+  return { ...facts, voiceVersion, model:process.env.AI_REPORT_MODEL || "gpt-6-luna", writing: reportWriting(facts) };
 }
 
 async function report(date, weekly = false) {
@@ -450,7 +452,7 @@ const server = http.createServer(async (req, res) => {
           b.title.length > 160
         )
           return send(res, 400, { error: "请选择活动主题" });
-        const input = { title: b.title, store: getSettings(), version: COPY_VERSION, voiceVersion };
+        const input = { title: b.title, store: getSettings(), version: COPY_VERSION, voiceVersion, model:process.env.AI_MODEL || "gpt-6-luna" };
         const campaignKey = hash(input);
         const existing = db
           .prepare("SELECT * FROM campaigns WHERE id=?")

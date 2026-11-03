@@ -99,11 +99,15 @@ function render() {
   })[tab]();
 }
 function reportMarkup(text) {
+  const emphasize = value => {
+    const shape = /增长/.test(value) ? '<path d="M4 12 12 4M5 4h7v7"/>' : /下降/.test(value) ? '<path d="m4 4 8 8M5 12h7V5"/>' : /%/.test(value) ? '<circle cx="8" cy="8" r="5.5"/><path d="M8 2.5V8h5.5"/>' : '<circle cx="8" cy="8" r="5.5"/><path d="m6 5 2 3 2-3M6 8h4M6 10h4M8 8v4"/>';
+    return '<strong class="report-number">'+value+'<svg class="number-icon" viewBox="0 0 16 16" aria-hidden="true">'+shape+'</svg></strong>';
+  };
   return '<div class="report-prose">' + String(text).trim().split(/\n\s*\n/).filter(Boolean).map(paragraph =>
-    '<p>' + esc(paragraph).replace(/\*\*([^*\n]+)\*\*/g, (_, value) => {
-      const shape = /增长/.test(value) ? '<path d="M4 12 12 4M5 4h7v7"/>' : /下降/.test(value) ? '<path d="m4 4 8 8M5 12h7V5"/>' : /%/.test(value) ? '<circle cx="8" cy="8" r="5.5"/><path d="M8 2.5V8h5.5"/>' : '<circle cx="8" cy="8" r="5.5"/><path d="m6 5 2 3 2-3M6 8h4M6 10h4M8 8v4"/>';
-      return '<strong class="report-number">'+value+'<svg class="number-icon" viewBox="0 0 16 16" aria-hidden="true">'+shape+'</svg></strong>';
-    }).replace(/\n/g, '<br>') + '</p>'
+    '<p>' + esc(paragraph).split(/(\*\*[^*\n]+\*\*)/g).map(part => part.startsWith('**') && part.endsWith('**')
+      ? emphasize(part.slice(2,-2))
+      : part.replace(/((?:增长|下降)?\d[\d,]*(?:\.\d+)?(?:万?元|%))/g, emphasize)
+    ).join('').replace(/\n/g, '<br>') + '</p>'
   ).join('') + '</div>';
 }
 function profitChart() {
