@@ -31,6 +31,7 @@ let state,
   activeSource = "全部",
   pendingCampaign = false;
 async function api(path, method = "GET", data) {
+  if (globalThis.__barAdvisorLocalApi) return globalThis.__barAdvisorLocalApi(path, method, data);
   const r = await fetch("/api/" + path, {
     method,
     headers: data ? { "Content-Type": "application/json" } : undefined,
@@ -97,6 +98,35 @@ function render() {
     game: renderGames,
   })[tab]();
 }
+function reportMarkup(text) {
+  return '<div class="report-prose">' + String(text).trim().split(/\n\s*\n/).filter(Boolean).map(paragraph =>
+    '<p>' + esc(paragraph).replace(/\*\*([^*\n]+)\*\*/g, (_, value) => {
+      const shape = /增长/.test(value) ? '<path d="M4 12 12 4M5 4h7v7"/>' : /下降/.test(value) ? '<path d="m4 4 8 8M5 12h7V5"/>' : /%/.test(value) ? '<circle cx="8" cy="8" r="5.5"/><path d="M8 2.5V8h5.5"/>' : '<circle cx="8" cy="8" r="5.5"/><path d="m6 5 2 3 2-3M6 8h4M6 10h4M8 8v4"/>';
+      return '<strong class="report-number">'+value+'<svg class="number-icon" viewBox="0 0 16 16" aria-hidden="true">'+shape+'</svg></strong>';
+    }).replace(/\n/g, '<br>') + '</p>'
+  ).join('') + '</div>';
+}
+function profitChart() {
+  const end = new Date(selected + "T00:00:00Z");
+  const points = Array.from({ length: 7 }, (_, i) => {
+    const day = new Date(end); day.setUTCDate(day.getUTCDate() - 6 + i);
+    const date = day.toISOString().slice(0, 10);
+    const bill = state.bills.find(b => b.date === date);
+    return { date, value: bill ? bill.income - bill.expense : null };
+  });
+  const values = points.filter(p => p.value !== null).map(p => p.value);
+  const bound = Math.max(...values.map(Math.abs), 100);
+  const y = value => 72 - value / bound * 48;
+  let drawing = "";
+  points.forEach((p, i) => {
+    if (p.value === null) return;
+    const x = 26 + i * 48;
+    if (i && points[i-1].value !== null) drawing += `<line x1="${x-48}" y1="${y(points[i-1].value)}" x2="${x}" y2="${y(p.value)}" class="profit-line"/>`;
+    drawing += `<circle cx="${x}" cy="${y(p.value)}" r="3.5" class="profit-dot"><title>${p.date}：${signed(p.value)}元</title></circle>`;
+  });
+  const total = values.reduce((a,b) => a+b, 0);
+  return `<figure class="profit-trend"><figcaption><h3>近七天盈亏</h3><span>${values.length ? signed(total)+' 元' : '尚未记账'}</span></figcaption><svg viewBox="0 0 340 154" role="img" aria-label="${esc(points.map(p=>p.date+' '+(p.value===null?'未记账':signed(p.value)+'元')).join('；'))}"><line x1="26" y1="72" x2="314" y2="72" class="profit-zero"/><text x="4" y="76" class="profit-label">0</text>${drawing}${points.map((p,i)=>`<text x="${26+i*48}" y="148" text-anchor="middle" class="profit-label">${p.date.slice(5).replace('-','/')}</text>`).join('')}</svg><p>截至 ${selected.slice(5).replace('-','/')} · 已记 ${values.length} 天${values.length < 7 ? ' · 空缺为未记账' : ''}</p></figure>`;
+}
 function renderBills() {
   const rows = state.bills.filter((b) => b.date.startsWith(month));
   const income = rows.reduce((s, b) => s + b.income, 0),
@@ -115,7 +145,7 @@ function renderBills() {
     },
   ).join(
     "",
-  )}</div></section><section class="detail"><div class="section-title"><h2>${selected === state.today ? "今天" : selected.slice(5).replace("-", " 月 ") + " 日"}</h2><button class="link" id="editBill">${bill ? "编辑" : "记账"} ›</button></div>${bill ? `<div class="money-row"><span>收入</span><strong>¥ ${money(bill.income)}</strong></div><div class="money-row"><span>支出</span><strong>¥ ${money(bill.expense)}</strong></div><div class="money-row profit"><span>利润</span><strong>${signed(bill.income - bill.expense)}</strong></div>${bill.note ? `<p class="note">${esc(bill.note)}</p>` : ""}` : `<div class="empty">还没有账单</div>`}<p class="bottom-note">利润按已记录的收入减支出计算。</p></section></div><section class="insight"><div class="section-title"><h2>经营洞察</h2><span class="quiet">${selected.slice(5).replace("-", " / ")}</span></div>${report?.summary ? `<p>${esc(report.summary)}</p><div class="report-time">${new Date(report.updated).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })} 更新</div>` : report?.error ? `<p>${esc(report.error)}</p><button class="link" id="retryReport">重新分析 ›</button>` : bill ? `<p>账单已记下。<br><span>正在为你整理经营复盘。</span></p><button class="link" id="retryReport">查看分析 ›</button>` : `<p>先记一笔。<br><span>让经营建议，有据可依。</span></p>`}<button class="week" id="weekReport"><span>查看一周复盘</span>${icon("arrow")}</button></section>`;
+  )}</div>${profitChart()}</section><section class="detail"><div class="section-title"><h2>${selected === state.today ? "今天" : selected.slice(5).replace("-", " 月 ") + " 日"}</h2><button class="link" id="editBill">${bill ? "编辑" : "记账"} ›</button></div>${bill ? `<div class="money-row"><span>收入</span><strong>¥ ${money(bill.income)}</strong></div><div class="money-row"><span>支出</span><strong>¥ ${money(bill.expense)}</strong></div><div class="money-row profit"><span>利润</span><strong>${signed(bill.income - bill.expense)}</strong></div>${bill.note ? `<p class="note">${esc(bill.note)}</p>` : ""}` : `<div class="empty">还没有账单</div>`}<p class="bottom-note">利润按已记录的收入减支出计算。</p></section></div><section class="insight"><div class="section-title"><h2>经营洞察</h2><span class="quiet">${selected.slice(5).replace("-", " / ")}</span></div>${report?.summary ? `${reportMarkup(report.summary)}<div class="report-time">${new Date(report.updated).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })} 更新</div>` : report?.error ? `<p>${esc(report.error)}</p><button class="link" id="retryReport">重新分析 ›</button>` : bill ? `<p>账单已记下。<br><span>正在为你整理经营复盘。</span></p><button class="link" id="retryReport">查看分析 ›</button>` : `<p>先记一笔。<br><span>让经营建议，有据可依。</span></p>`}<button class="week" id="weekReport"><span>查看一周复盘</span>${icon("arrow")}</button></section>`;
   $("#addBill").onclick = () => editBill(state.today);
   $("#editBill").onclick = () => editBill(selected);
   $("#prevMonth").onclick = () => changeMonth(-1);
@@ -228,7 +258,7 @@ async function runReport(date, weekly = false) {
     if (weekly) {
       showSheet(
         "近七天经营复盘",
-        `<p class="eyebrow">截至 ${date}</p><div class="campaign-copy">${esc(r?.summary || r?.error || "这段时间还没有账单。先记下收支，再来看一周的变化。")}</div>`,
+        `<p class="eyebrow">截至 ${date}</p>${r?.summary ? reportMarkup(r.summary) : `<p class="error-box">${esc(r?.error || "这段时间还没有账单")}</p>`}`,
       );
     } else {
       renderBills();
@@ -241,7 +271,7 @@ async function runReport(date, weekly = false) {
   }
 }
 function renderActivities() {
-  app.innerHTML = `<div class="page-top"><h1>活动</h1><button class="link" id="customIdea">新建活动 ＋</button></div><section class="editorial-hero"><p class="hero-kicker">下一场，玩点新的。</p><h2>今晚的热点。<br><span>明晚的主场。</span></h2><button class="primary" id="heroIdea">开始策划</button></section><section class="trend-list"><div class="section-title"><h2>值得关注</h2><span class="quiet" id="hotTime">正在同步</span></div><div id="hotList"><div class="loading">正在同步热榜…</div></div></section><section class="saved-section"><div class="section-title"><h2>已保存的活动</h2><span class="quiet">${state.campaigns.length} 场</span></div><div id="campaignList">${campaignList()}</div></section>`;
+  app.innerHTML = `<div class="page-top"><h1>活动</h1><button class="link" id="customIdea">新建活动 ＋</button></div><section class="editorial-hero"><p class="hero-kicker">下一场，玩点新的。</p><h2 class="optical-title"><span class="hero-line">今晚的热点<span class="hanging-punctuation">。</span></span><br><span class="hero-line muted">明晚的主场<span class="hanging-punctuation">。</span></span></h2><button class="primary" id="heroIdea">开始策划</button></section><section class="trend-list"><div class="section-title"><h2>值得关注</h2><span class="quiet" id="hotTime">正在同步</span></div><div id="hotList"><div class="loading">正在同步热榜…</div></div></section><section class="saved-section"><div class="section-title"><h2>已保存的活动</h2><span class="quiet">${state.campaigns.length} 场</span></div><div id="campaignList">${campaignList()}</div></section>`;
   $("#customIdea").onclick = customIdea;
   $("#heroIdea").onclick = customIdea;
   bindCampaigns();
@@ -366,7 +396,7 @@ function openCampaign(c) {
       )
       .join(
         "",
-      )}<div class="copy-head"><h3>执行清单</h3></div>${d.checklist.map((t, i) => `<label class="check-item"><input type="checkbox" data-check="${i}" ${localStorage.getItem(c.id + ":" + i) ? "checked" : ""}><span>${esc(t)}</span></label>`).join("")}<div class="poster"><small>今夜相聚</small><h3>${esc(d.poster)}</h3><div class="poster-bottom">${esc(state.settings.name)}<br>相聚，就在今晚。<br><small>18+ · 理性饮酒</small></div></div><button class="primary wide" id="downloadPoster" style="margin-top:16px">保存宣传海报 ↓</button>`,
+      )}<div class="copy-head"><h3>执行清单</h3></div>${d.checklist.map((t, i) => `<label class="check-item"><input type="checkbox" data-check="${i}" ${localStorage.getItem(c.id + ":" + i) ? "checked" : ""}><span>${esc(t)}</span></label>`).join("")}<div id="aiPoster" class="ai-poster">${d.image?.url ? `<img src="${esc(d.image.url)}" alt="${esc(c.title)}活动海报" loading="lazy">` : '<p>让这场活动，有自己的画面。</p><small>按活动内容生成 AI 海报</small>'}</div><p id="posterError" class="form-error" role="alert"></p><button class="primary wide" id="downloadPoster" style="margin-top:16px">${d.image?.url ? '保存海报 ↓' : '生成 AI 海报'}</button>`,
   );
   document.querySelectorAll("[data-copy]").forEach(
     (b) =>
@@ -387,50 +417,24 @@ function openCampaign(c) {
         else localStorage.removeItem(k);
       }),
   );
-  $("#downloadPoster").onclick = () => downloadPoster(d.poster);
-}
-function downloadPoster(title) {
-  const canvas = document.createElement("canvas");
-  canvas.width = 1080;
-  canvas.height = 1440;
-  const c = canvas.getContext("2d");
-  c.fillStyle = "#161619";
-  c.fillRect(0, 0, 1080, 1440);
-  c.strokeStyle = "#ffffff18";
-  for (let i = 0; i < 4; i++) {
-    c.beginPath();
-    c.arc(890, 530, 250 + i * 45, 0, Math.PI * 2);
-    c.stroke();
-  }
-  c.fillStyle = "#f5f5f7";
-  c.font = "24px sans-serif";
-  c.fillText("今夜相聚", 90, 130);
-  c.font = "bold 105px sans-serif";
-  let line = "",
-    y = 390;
-  for (const ch of title) {
-    if (c.measureText(line + ch).width > 850) {
-      c.fillText(line, 90, y);
-      line = "";
-      y += 145;
-    }
-    line += ch;
-  }
-  c.fillText(line, 90, y);
-  c.font = "38px sans-serif";
-  c.fillText(state.settings.name, 90, 1210);
-  c.font = "25px sans-serif";
-  c.fillText("相聚，就在今晚。", 90, 1270);
-  c.fillText("18+ · 理性饮酒", 90, 1350);
-  canvas.toBlob((blob) => {
-    const url = URL.createObjectURL(blob),
-      a = document.createElement("a");
-    a.href = url;
-    a.download = title + ".png";
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    toast("海报已导出");
-  });
+  $("#downloadPoster").onclick = async () => {
+    const button = $("#downloadPoster"), error = $("#posterError");
+    button.disabled = true; error.textContent = "";
+    try {
+      if (!d.image?.url) {
+        button.textContent = "正在生成海报…";
+        d.image = await api("posters", "POST", { campaignId: c.id });
+        openCampaign(c);
+      } else {
+        const response = await fetch(d.image.url);
+        if (!response.ok) throw Error("海报下载失败，请重试");
+        const url = URL.createObjectURL(await response.blob());
+        const a = document.createElement("a"); a.href = url; a.download = c.title + ".png"; a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
+      }
+    } catch (e) { error.textContent = e.message; }
+    finally { button.disabled = false; button.textContent = d.image?.url ? "保存海报 ↓" : "生成 AI 海报"; }
+  };
 }
 function renderMarketing() {
   app.innerHTML = `<div class="page-top"><h1>营销</h1><button class="link" id="newMarketing">创建 ＋</button></div><section class="marketing-hero"><div class="marketing-title"><p class="hero-kicker">文案。海报。一次就绪。</p><h2>好夜晚，<br>自带吸引力。</h2><button class="primary" id="heroMarketing">制作推广内容</button></div><div class="poster-stage" aria-hidden="true"><div class="poster-pair"><div class="poster-object back"><span>周末</span><strong>留点时间<br>给自己。</strong><small>21:00 — LATE</small></div><div class="poster-object front"><span>今夜</span><strong>不赶时间。</strong><div class="poster-disc"></div><small>音乐 · 相聚 · 微醺</small></div></div></div></section><section class="saved-section"><div class="section-title"><h2>你的素材</h2><span class="quiet">${state.campaigns.length} 套</span></div>${campaignList()}</section>`;

@@ -17,7 +17,7 @@ AI_BASE_URL=https://api.chatanywhere.tech/v1
 AI_MODEL=gpt-4o-mini
 PORT=4317
 HOST=127.0.0.1
-DAILY_AI_LIMIT=20
+# 不设置每日硬上限；usage 仅记录调用次数。
 ```
 
 可手动改用 `https://api.chatanywhere.org/v1`；现有代码不会自动故障切换，避免重复收费。不要使用 OpenAI 官方域名发送这个供应商的密钥。
@@ -53,3 +53,9 @@ const output = JSON.parse(result.choices[0].message.content);
 这是协议示例；复刻时直接保留 `server.mjs` 的完整实现，不用示例替换原代码。原实现含经营提示、资料检索、返回格式校验、缓存、并发去重、日限额与错误处理。模型可用性由供应商与账户决定，报错时保留明确反馈，不伪造生成结果。
 
 热榜请求示例：`GET https://uapis.cn/api/v1/misc/hotboard?type=weibo`。前端调用本站 `/api/hotspots`，由服务端采集筛选；不在每个用户点击时向所有平台重复抓取。
+
+2026-11-03 更新：后端不再设置每日调用次数硬上限，usage 只作统计；仍使用同输入缓存、并发合并、真实错误响应。报告以模型生成的三个段落返回，前端只渲染转义后的 Markdown 加粗、换行和数字图标，不补写分析或模板。
+
+`private/brand-voice.txt` 为用户上传《小红书 (2).docx》的服务端文本，约26万字。每次检索最多3段、每段850字作为语气参考，与经营资料分开；原文不进前端、不提交公开仓库。语料内容只作参考，不能覆盖系统指令或账目事实。
+
+海报调用 `/v1/images/generations`，模型由 `AI_IMAGE_MODEL` 配置（默认 `gpt-image-2`），请求 base64 图片，持久化到数据库同目录的 posters 文件夹，经 `/bar-advisor-media/` 公共路由读取。相同活动复用已生成海报，首次生成由用户主动触发，没有 Canvas 替代。当前服务商实测返回403，尚未验证出图成功；需要服务商开放该密钥对应的图片模型权限。此问题与已移除的应用每日限额无关。

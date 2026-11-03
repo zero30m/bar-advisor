@@ -1,5 +1,5 @@
 import {businessDay} from './business-calendar.mjs';
-export const REPORT_VERSION='focused-analysis-v5';
+export const REPORT_VERSION='natural-analysis-v10';
 export const yuan=cents=>(cents/100).toFixed(2);
 const shift=(date,n)=>{const d=new Date(date+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);};
 const days=(start,end)=>Math.round((new Date(end+'T00:00:00Z')-new Date(start+'T00:00:00Z'))/86400000)+1;
@@ -65,6 +65,16 @@ const plainMoney=n=>{const v=Number(n);return Math.abs(v)>=10000?Number((v/10000
 export function reportWriting(input){
  const f=input.focus,p=input.payback;
  const tokens={income:plainMoney(f.incomeYuan),expense:plainMoney(f.expenseYuan),balance:plainMoney(Math.abs(Number(f.cashDifferenceYuan))),days:String(f.recordedDays)};
+ const recent=input.bills.filter(b=>b.date>=shift(input.date,input.weekly?-6:0));
+ const ranked=[...recent].sort((a,b)=>Number(b.incomeYuan)-Number(a.incomeYuan));
+ const periodDetails={};
+ if(ranked.length>1){
+  const best=ranked[0],worst=ranked[ranked.length-1];
+  tokens.bestIncome=plainMoney(best.incomeYuan);tokens.lowestIncome=plainMoney(worst.incomeYuan);
+  periodDetails.highestIncomeDay=best.calendar.weekday;periodDetails.lowestIncomeDay=worst.calendar.weekday;
+ }
+ const previous=input.bills.find(b=>b.date===shift(input.date,-1));
+ if(!input.weekly&&previous){tokens.previousIncome=plainMoney(previous.incomeYuan);tokens.previousExpense=plainMoney(previous.expenseYuan);}
  if(p.scenarios.length){
   const goal=p.scenarios[0];
   tokens.recordedMonthIncome=plainMoney(input.month.incomeYuan);
@@ -73,28 +83,16 @@ export function reportWriting(input){
  }
 
  for(const [key,value] of Object.entries(input.comparisons))if(value.complete&&value.incomeChangePercent!==null)tokens[key+'Change']=direction(value.incomeChangePercent);
- return {tokens,style:'老板能直接看懂的简短复盘，两小段，通常120到200字；只讲最重要的两三件事。',balanceMeaning:Number(f.cashDifferenceYuan)>=0?'记下的收入减去支出后剩下':'记下的支出比收入多',missing:input.weekly?f.recordedDays<7:!input.comparisons.previous.complete};
-}
-function plainFallback(input){
- const t=reportWriting(input).tokens,f=input.focus;
- const opening=input.weekly?'这周目前记了'+t.days+'天账':'这天';
- const money=opening+'，收入'+t.income+'，支出'+t.expense+'，'+(Number(f.cashDifferenceYuan)>=0?'账面还剩':'支出比收入多了')+t.balance+'。';
- let detail='';
- const comparison=input.comparisons.sameWeekday?.complete?input.comparisons.sameWeekday:input.comparisons.previous;
- if(comparison.complete&&comparison.incomeChangePercent!==null)detail='收入'+comparison.label+direction(comparison.incomeChangePercent)+'。';
- else detail=input.weekly&&f.recordedDays<7?'先把这周剩下的账补齐，才看得出整周生意有没有变好。':'还缺少可对比的记录，先把前面的账补齐。';
- return money+'\n\n'+detail;
+ return {tokens,periodDetails,style:'老板能直接看懂的简短复盘，三个短段，通常180到280字；只讲最重要的两三件事。',balanceMeaning:Number(f.cashDifferenceYuan)>=0?'记下的收入减去支出后剩下':'记下的支出比收入多',missing:input.weekly?f.recordedDays<7:!input.comparisons.previous.complete};
 }
 export function reportSummary(input,output){
  const tokens=reportWriting(input).tokens;
  const text=output?.summary;
- if(typeof text!=='string'||text.length>650||!text.includes('{{'))return plainFallback(input);
+ if(typeof text!=='string')throw new Error('AI返回了无法核对的金额，请重新分析');
  let invalid=false;
  const stripped=text.replace(/\{\{([a-zA-Z]+)\}\}/g,(_,key)=>{if(tokens[key]===undefined)invalid=true;return '';});
  // Only program-supplied number tokens may enter the narrative. Reject invented financial amounts.
- if(invalid||/[0-9%％]|[零〇一二两三四五六七八九十百千]+(?:万元|元|亿元|倍|成)|口径：|不代表.*承诺|核查|均匀.*进度|运营日|销售潜力|市场环境|内部管理问题/.test(stripped))return plainFallback(input);
- if(!input.month.complete&&text.includes('{{recordedGoalGap}}')&&!/已记|记下|记录/.test(text))return plainFallback(input);
+ if(invalid||/[0-9%％]|[零〇一二两三四五六七八九十百千]+(?:万元|元|亿元|倍|成)/.test(stripped))throw new Error('AI返回了无法核对的金额，请重新分析');
  const result=text.replace(/\{\{([a-zA-Z]+)\}\}/g,(_,key)=>tokens[key]);
- if(result.length>320)return plainFallback(input);
  return result.trim();
 }

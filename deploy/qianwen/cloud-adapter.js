@@ -3,7 +3,7 @@
   const URL = "https://mfjgq.fun/bar-advisor-proxy";
   const allowed = new Set([
     "GET /state", "GET /hotspots", "PUT /bills", "DELETE /bills",
-    "PUT /settings", "POST /report", "POST /campaigns"
+    "PUT /settings", "POST /report", "POST /campaigns", "POST /posters"
   ]);
   const reading = new Map();
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -51,9 +51,9 @@
   async function call(path, method, data) {
     const route = `${method} /${path}`;
     if (!allowed.has(route)) throw new Error(`不支持的请求：${route}`);
-    const generate = route === "POST /report" || route === "POST /campaigns";
+    const generate = route === "POST /report" || route === "POST /campaigns" || route === "POST /posters";
     let result = await request({ route, payload: data ?? {}, async: generate }, method === "GET");
-    const deadline = Date.now() + 120000;
+    const deadline = Date.now() + (route === "POST /posters" ? 300000 : 120000);
     while (result?.pending === true) {
       if (Date.now() > deadline) throw new Error("生成仍在处理中，请稍后重新查看");
       const jobId = result.jobId;

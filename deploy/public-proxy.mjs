@@ -3,12 +3,12 @@ import http from 'node:http';
 import {randomUUID,createHash} from 'node:crypto';
 const token=process.env.BAR_API_TOKEN;
 if(!token || token.length<40) throw Error('Missing backend token');
-const routes=new Set(['GET /state','GET /hotspots','PUT /bills','DELETE /bills','PUT /settings','POST /report','POST /campaigns']);
+const routes=new Set(['GET /state','GET /hotspots','PUT /bills','DELETE /bills','PUT /settings','POST /report','POST /campaigns','POST /posters']);
 const jobs=new Map();let active=0,running=0;
 async function upstream(route,payload){
  const [method,path]=route.split(' ');
  try{
-  const r=await fetch('http://127.0.0.1:4319/api'+path,{method,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:method==='GET'?undefined:JSON.stringify(payload??{}),signal:AbortSignal.timeout(70000)});
+  const r=await fetch('http://127.0.0.1:4319/api'+path,{method,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:method==='GET'?undefined:JSON.stringify(payload??{}),signal:AbortSignal.timeout(route==='POST /posters'?250000:70000)});
   return {status:r.status,data:await r.json()};
  }catch{return {status:502,data:{error:'后端暂时不可达，请稍后重试'}};}
 }
@@ -34,7 +34,7 @@ http.createServer(async(req,res)=>{
    return;
   }
   if(!routes.has(route)){send(400,{error:'该请求不在代理白名单内'});return;}
-  if(body.async===true&&['POST /report','POST /campaigns'].includes(route)){
+  if(body.async===true&&['POST /report','POST /campaigns','POST /posters'].includes(route)){
    const key=createHash('sha256').update(JSON.stringify([route,body.payload??{}])).digest('hex');
    const existing=[...jobs].find(([,j])=>j.key===key&&!j.result);
    if(existing){send(202,{pending:true,jobId:existing[0]});return;}

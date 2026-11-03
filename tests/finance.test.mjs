@@ -5,10 +5,8 @@ const store={name:'测试',investment:6000000,months:12};
 test('fen are converted to yuan and model cannot replace deterministic financial facts',()=>{
  const input=reportFacts([{date:'2026-11-01',income:300000,expense:10000,note:''}],'2026-11-01',false,store);
  assert.equal(input.focus.cashDifferenceYuan,'2900.00');assert.equal(input.bills[0].incomeYuan,'3000.00');
- const output=reportSummary(input,'收入30万元，净利润29万元');
- assert.match(output,/收入3000元，支出100元，账面还剩2900元/);assert.ok(!output.includes('收入30万元'));
- const exact=reportFacts([{date:'2026-11-01',income:50000,expense:20000,note:''}],'2026-11-01',false,store);
- assert.match(reportSummary(exact,'利润三十万元'),/账面还剩300元/);
+ assert.throws(()=>reportSummary(input,{summary:'收入30万元，净利润29万元'}),/金额/);
+ assert.equal(reportSummary(input,{summary:'收入{{income}}，支出{{expense}}，账面还剩{{balance}}。'}),'收入3000元，支出100元，账面还剩2900元。');
 });
 test('weekly sum includes only seven Shanghai business dates, preserves cents and negatives',()=>{
  const rows=[{date:'2026-10-25',income:999999,expense:0},{date:'2026-10-26',income:101,expense:202},{date:'2026-11-01',income:100,expense:0}];
@@ -48,15 +46,13 @@ test('complete comparisons stay available but concise narrative uses validated n
 });
 test('short reports reject invented amounts and remove defensive boilerplate',()=>{
  const f=reportFacts([{date:'2026-11-01',income:300000,expense:10000}],'2026-11-02',true,{...store,investment:300000});
- const summary=reportSummary(f,{summary:'收入{{income}}，支出{{expense}}，净赚30万元。'});
- assert.match(summary,/收入3000元/);assert.ok(summary.length<220);assert.ok(!/口径|同比|日历进度|不代表|净赚30万元/.test(summary));
+ assert.throws(()=>reportSummary(f,{summary:'收入{{income}}，支出{{expense}}，净赚30万元。'}),/金额/);
  const clean=reportSummary(f,{summary:'这周目前记了{{days}}天账，收入{{income}}，支出{{expense}}，账面还剩{{balance}}。先把剩下的账补齐，再看整周生意怎么样。'});
  assert.match(clean,/记了1天账/);
 });
 test('reports no longer append repayment formula and AI can lead with comparisons or goal gap',()=>{
  const f=reportFacts([{date:'2026-11-01',income:300000,expense:10000}],'2026-11-02',true,{...store,investment:300000});
- const fallback=reportSummary(f,{summary:'invalid'});
- assert.ok(!/想在|平均每月|净利率/.test(fallback));
+ assert.equal(reportSummary(f,{summary:'请补齐缺失的账单后再比较。'}),'请补齐缺失的账单后再比较。');
  const chosen=reportSummary(f,{summary:'本月已记下{{recordedMonthIncome}}，按这些记录，离本月营业额目标还差{{recordedGoalGap}}。这周的账还没记全，先补齐再看生意有没有变好。'});
  assert.match(chosen,/离本月营业额目标还差24.7万元/);assert.ok(!chosen.includes('想在'));
 });
